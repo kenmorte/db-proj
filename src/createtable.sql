@@ -63,6 +63,6 @@ CREATE TABLE `sales` (
    PRIMARY KEY (`id`),
    KEY `sales_customer_id_idx` (`customer_id`),
    KEY `sales_movie_id_idx` (`movie_id`),
-   CONSTRAINT `sales_customer_id` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION,
+   CONSTRAINT `sales_customer_id` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
    CONSTRAINT `sales_movie_id` FOREIGN KEY (`movie_id`) REFERENCES `movies` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION
  ) ENGINE=InnoDB AUTO_INCREMENT=6452 DEFAULT CHARSET=utf8

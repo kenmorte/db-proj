@@ -278,6 +278,13 @@ public class FabFlixDBManager
 		}
 	}
 	
+	public String deleteCustomer(Integer id) {
+		if (id == null)
+			return FabFlixConsole.getErrorMessage("Invalid ID inputted. Cannot execute deletion.");
+		
+		return "foo";
+	}
+	
 	/**
 	 * Checks if a specified credit card (by ID) exists in the database.
 	 * 
