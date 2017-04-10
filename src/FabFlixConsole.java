@@ -1,4 +1,8 @@
 import java.util.Scanner;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+
 import java.sql.*;
 
 public class FabFlixConsole
@@ -12,7 +16,8 @@ public class FabFlixConsole
 			"--------------------------------- MAIN MENU ----------------------------------\n" +
 			"Please select an integer option from the console menu, or input '0' to quit:\n" + 
 					"[1]\t Print out movies featuring a given star by ID\n" +
-					"[2]\t Print out movies featuring a given star by first and/or last name";
+					"[2]\t Print out movies featuring a given star by first and/or last name\n" +
+					"[3]\t Insert a new star into the database";
 	
 	public FabFlixConsole() {
 		try {
@@ -78,6 +83,7 @@ public class FabFlixConsole
 	private String handleMenuInput(String input) {
 		int inputCommand;
 		String output = "";
+		Integer id;
 		
 		try { inputCommand = Integer.parseInt(input); }
 		catch (NumberFormatException e) { 
@@ -87,15 +93,32 @@ public class FabFlixConsole
 		
 		switch (inputCommand) {
 		case 1:	// Get movies featuring star by star ID
-			Integer id = promptInt("\tEnter the movie star's ID: ", "Invalid ID inputted. Unable to execute query.", true);
+			id = promptInt("\tEnter the movie star's ID: ", "Invalid ID inputted. Unable to execute query.", true);
 			if (id != null)
 				output = mManager.getMoviesForStar(id);
 			break;
 		
 		case 2: // Get movies featuring star by first and/or last name (of star)
-			String firstName = promptString("\tEnter the movie star's first name (optional): ");
-			String lastName = promptString("\tEnter the movie star's last name (optional): ");
+			String firstName = promptString("\tEnter the movie star's first name (optional): ", "", true, true);
+			String lastName = promptString("\tEnter the movie star's last name" + " (optional): ", "", true, true);
 			output = mManager.getMoviesForStar(firstName, lastName);
+			break;
+			
+		case 3: // Insert a new star into the database
+			id = promptInt("\tEnter the new movie star's ID: ", "Invalid ID inputted. Unable to execute insertion.", true);
+			if (id == null)
+				break;
+			
+			String name = promptString("\tEnter the movie star's name: ", "Invalid name inputted. Unable to execute insertion.", false, true);
+			if (name == null)
+				break;
+			
+			Date dob = promptDate("\tEnter the movie star's date of birth (in MM-dd-yyyy format; optional): ", "Invalid date inputted. Please try again.", true);
+			if (dob == null)
+				break;
+			
+			String photoURL = promptString("\tEnter a URL of the movie star's photo (optional): ", "", true, true);
+			output = mManager.insertStar(id, name, dob, photoURL);
 			break;
 			
 		default:	// Unknown command
@@ -172,7 +195,7 @@ public class FabFlixConsole
 	 * @param info detailed message following the header
 	 * @return	full info message with headers
 	 */
-	private String getInfoMessage(String info) {
+	public static String getInfoMessage(String info) {
 		return mInfoHeader + info;
 	}
 	
@@ -212,9 +235,59 @@ public class FabFlixConsole
 	 * @param prompt	Prompt header displayed before input
 	 * @return	string representing the user input
 	 */
-	private String promptString(String prompt) {
+	private String promptString(String prompt, String errorMessage, boolean canBeEmpty, boolean promptOnce) {
+		String result = null;
+		
 		System.out.print(prompt);
-		return mReader.nextLine().trim();
+		while ((result = mReader.nextLine().trim()).isEmpty() && !canBeEmpty) {
+			System.out.println(getErrorMessage(errorMessage));
+			
+			if (promptOnce) {
+				result = null;
+				break;
+			}
+			
+			System.out.print(prompt);
+		}
+		
+		return result;
+	}
+	
+	/**
+	 * Returns a Date object from user input with proper prompt and error messages displayed.
+	 * Returns null if user input was empty
+	 * 
+	 * @param prompt	prompt header that gets displayed prior to user input
+	 * @param errorMessage	error message that is displayed for erroneous input
+	 * @param promptOnce	only prompts for input once if true, otherwise continuously prompts for input
+	 * @return	null if user input was empty, a Date object for correct input
+	 */
+	private Date promptDate(String prompt, String errorMessage, boolean promptOnce) {
+		Date result = null;
+		SimpleDateFormat dateFormatter = new SimpleDateFormat("MM-dd-yyyy");
+		String input;
+		
+		while (true) {
+			try {
+				System.out.print(prompt);
+				
+				if ((input = mReader.nextLine().trim()).isEmpty())
+					return null;
+				
+				// Hack to convert from java.util.Date to java.sql.Date
+				// 	thanks to http://stackoverflow.com/questions/17102988/java-sql-date-formatting
+				result = new Date(dateFormatter.parse(input).getTime());
+				break;
+				
+			} catch (ParseException e) {
+				System.out.println(getErrorMessage(errorMessage));
+				result = null;
+				
+				if (promptOnce)	break;
+				else continue;
+			}
+		}
+		return result;
 	}
 	
 	/**
