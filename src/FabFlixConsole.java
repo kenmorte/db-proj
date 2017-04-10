@@ -12,12 +12,15 @@ public class FabFlixConsole
 	
 	private static final String mErrorHeader = "**ERROR**: ";
 	private static final String mInfoHeader = "**INFO**: ";
+	private static final String mQuitOutput = "### QUIT ###";
 	private static final String mMenuList = 
 			"--------------------------------- MAIN MENU ----------------------------------\n" +
-			"Please select an integer option from the console menu, or input '0' to quit:\n" + 
+			"Please select an integer option from the console menu, or input '0' to log out:\n" + 
+					"[0]\t Log out from the main menu\n" +
 					"[1]\t Print out movies featuring a given star by ID\n" +
 					"[2]\t Print out movies featuring a given star by first and/or last name\n" +
-					"[3]\t Insert a new star into the database";
+					"[3]\t Insert a new star into the database\n" +
+					"[4]\t Insert a new customer into the database";
 	
 	public FabFlixConsole() {
 		try {
@@ -52,6 +55,9 @@ public class FabFlixConsole
 			
 			while (!(input).equals("0")) {	// continue until user quits the main menu
 				output = handleMenuInput(input);
+				if (output.equals(mQuitOutput))
+					break;
+				
 				System.out.println(output);
 				System.out.println();
 				
@@ -82,8 +88,9 @@ public class FabFlixConsole
 	 */
 	private String handleMenuInput(String input) {
 		int inputCommand;
-		String output = "";
+		String firstName, lastName, output = "";
 		Integer id;
+		Date dob = null;
 		
 		try { inputCommand = Integer.parseInt(input); }
 		catch (NumberFormatException e) { 
@@ -92,6 +99,9 @@ public class FabFlixConsole
 		}
 		
 		switch (inputCommand) {
+		case 0:	// Quit the program
+			output = mQuitOutput;
+			break;
 		case 1:	// Get movies featuring star by star ID
 			id = promptInt("\tEnter the movie star's ID: ", "Invalid ID inputted. Unable to execute query.", true);
 			if (id != null)
@@ -99,28 +109,51 @@ public class FabFlixConsole
 			break;
 		
 		case 2: // Get movies featuring star by first and/or last name (of star)
-			String firstName = promptString("\tEnter the movie star's first name (optional): ", "", true, true);
-			String lastName = promptString("\tEnter the movie star's last name" + " (optional): ", "", true, true);
+			firstName = promptString("\tEnter the movie star's first name (optional): ", "", true, true);
+			lastName = promptString("\tEnter the movie star's last name" + " (optional): ", "", true, true);
 			output = mManager.getMoviesForStar(firstName, lastName);
 			break;
 			
 		case 3: // Insert a new star into the database
-			id = promptInt("\tEnter the new movie star's ID: ", "Invalid ID inputted. Unable to execute insertion.", true);
-			if (id == null)
+			firstName = promptString("\tEnter the movie star's first name (optional): ", "", true, true);
+			lastName = promptString("\tEnter the movie star's last name: ", "Invalid last name inputted. Unable to execute insertion.", false, true);
+			if (lastName == null)
 				break;
 			
-			String name = promptString("\tEnter the movie star's name: ", "Invalid name inputted. Unable to execute insertion.", false, true);
-			if (name == null)
-				break;
-			
-			Date dob = promptDate("\tEnter the movie star's date of birth (in MM-dd-yyyy format; optional): ", "Invalid date inputted. Please try again.", true);
-			if (dob == null)
-				break;
+			String dobInput = promptString("\tEnter the movie star's date of birth (in MM-dd-yyyy format; optional): ", "", true, true);
+			if (!dobInput.isEmpty()) {
+				if ((dob = parseDate(dobInput, "Invalid date inputted. Please try again.")) == null)
+					break;
+			}
 			
 			String photoURL = promptString("\tEnter a URL of the movie star's photo (optional): ", "", true, true);
-			output = mManager.insertStar(id, name, dob, photoURL);
+			output = mManager.insertStar(firstName, lastName, dob, photoURL);
 			break;
+		
+		case 4: 
+			firstName = promptString("\tEnter the customer's first name (optional): ", "", true, true);
+			lastName = promptString("\tEnter the customer's last name: ", "Invalid or empty last name inputted. Unable to execute insertion.", false, true);
+			if (lastName == null)
+				break;
 			
+			String creditCardID = promptString("\tEnter the customer's credit card ID: ", "Invalid or empty credit card ID inputted. Unable to execute insertion.", false, true);
+			if (creditCardID == null)
+				break;
+			
+			String address = promptString("\tEnter the customer's address: ", "Invalid or empty address inputted. Unable to execute insertion.", false, true);
+			if (address == null)
+				break;
+			
+			String email = promptString("\tEnter the customer's e-mail address: ", "Invalid or empty e-mail address inputted. Unable to execute insertion.", false, true);
+			if (email == null)
+				break;
+			
+			String password = promptString("\tEnter the customer's password: ", "Invalid or empty password inputted. Unable to execute insertion.", false, true);
+			if (password == null)
+				break;
+			
+			output = mManager.insertCustomer(firstName, lastName, creditCardID, address, email, password);
+			break;
 		default:	// Unknown command
 			output = getErrorMessage("Unknown command inputted. Please try again");
 			break;
@@ -199,6 +232,7 @@ public class FabFlixConsole
 		return mInfoHeader + info;
 	}
 	
+	
 	/**
 	 * Prompts the user for an integer, and prints out proper prompt headers before input
 	 * and error messages after input for non-integer inputs. Can repeatedly prompt user
@@ -253,42 +287,23 @@ public class FabFlixConsole
 		return result;
 	}
 	
+
 	/**
-	 * Returns a Date object from user input with proper prompt and error messages displayed.
-	 * Returns null if user input was empty
+	 * Returns a Date object from a string. Prints out an error message if the operation
+	 * was unsuccessful.
 	 * 
-	 * @param prompt	prompt header that gets displayed prior to user input
-	 * @param errorMessage	error message that is displayed for erroneous input
-	 * @param promptOnce	only prompts for input once if true, otherwise continuously prompts for input
-	 * @return	null if user input was empty, a Date object for correct input
+	 * @param dateString	string representing the date (in MM-dd-yyyy format)
+	 * @param errorMessage	error message that gets printed out if error occurred
+	 * @return	Date object from the parsed string input
 	 */
-	private Date promptDate(String prompt, String errorMessage, boolean promptOnce) {
-		Date result = null;
-		SimpleDateFormat dateFormatter = new SimpleDateFormat("MM-dd-yyyy");
-		String input;
-		
-		while (true) {
-			try {
-				System.out.print(prompt);
-				
-				if ((input = mReader.nextLine().trim()).isEmpty())
-					return null;
-				
-				// Hack to convert from java.util.Date to java.sql.Date
-				// 	thanks to http://stackoverflow.com/questions/17102988/java-sql-date-formatting
-				result = new Date(dateFormatter.parse(input).getTime());
-				break;
-				
-			} catch (ParseException e) {
-				System.out.println(getErrorMessage(errorMessage));
-				result = null;
-				
-				if (promptOnce)	break;
-				else continue;
-			}
+	private Date parseDate(String dateString, String errorMessage) {
+		try {
+			return new Date(new SimpleDateFormat("MM-dd-yyyy").parse(dateString).getTime());
+		} catch (ParseException e) {
+			System.out.println(getErrorMessage(errorMessage));
+			return null;
 		}
-		return result;
-	}
+	} 
 	
 	/**
 	 * Runs the main program for the JDBC client.
@@ -303,7 +318,7 @@ public class FabFlixConsole
     	}
     	catch (Exception e) {
     		// Catch any uncaught exceptions here (should try to catch them further up, however)
-    		System.out.println(getErrorMessage(e.getMessage()));
+    		System.out.println(getErrorMessage("Unable to connect to database. Error message provided: " + e.getMessage()));
     	}
     }
 }

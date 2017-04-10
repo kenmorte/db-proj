@@ -28,6 +28,7 @@ public class FabFlixDBManager
 				password);
 			
 		} catch (SQLException e) {
+			mConnection = null;
 			return e;
 		}
 		return null;
@@ -84,6 +85,10 @@ public class FabFlixDBManager
 			default:
 				return FabFlixConsole.getErrorMessage("Error code " + e.getErrorCode() + ": " + e.getMessage());
 			}
+		} catch (NullPointerException e) {
+			if (mConnection == null)
+				return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			return FabFlixConsole.getErrorMessage("Error executing insertion of star.");
 		}
 	}
 
@@ -153,21 +158,31 @@ public class FabFlixDBManager
 				return FabFlixConsole.getErrorMessage("Error code " + e.getErrorCode() + ": " + e.getMessage());
 			}
 		} catch (NullPointerException e) {
-			return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			if (mConnection == null)
+				return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			return FabFlixConsole.getErrorMessage("Error executing insertion of star.");
 		}
 	}
 
-	public String insertStar(Integer id, String name, Date dob, String photoURL) {
-		if (id == null)
-			return FabFlixConsole.getErrorMessage("Invalid ID inputted. Cannot execute insertion.");
-		if (name == null || name.isEmpty())
-			return FabFlixConsole.getErrorMessage("Invalid name inputted. Cannot execute insertion.");
+	/**
+	 * Inserts a star into the movie database. If an error occurs while inserting a star,
+	 * the operation is canceled and a proper error message is returned by the method.
+	 * We do not need to include the ID for a star because it is auto-incremented.
+	 * 
+	 * @param firstName	first name of the star
+	 * @param lastName	last name of the star
+	 * @param dob	date of birth for the star
+	 * @param photoURL	URL linking to a photo of the star
+	 * @return	output message if the insertion was a success or not
+	 */
+	public String insertStar(String firstName, String lastName, Date dob, String photoURL) {
+		if (firstName == null)
+			return FabFlixConsole.getErrorMessage("Invalid first name inputted. Cannot execute insertion."); 
+		if (lastName == null || lastName.isEmpty())
+			return FabFlixConsole.getErrorMessage("Invalid last name inputted. Cannot execute insertion.");
 		
 		StringBuffer buffer = new StringBuffer();
-		String[] fullName = getFullName(name);
-		String firstName = fullName[0], lastName = fullName[1];
-		String insertStatement = "insert into stars values(" + 
-				id + 
+		String insertStatement = "insert into stars values(DEFAULT" + 
 				",\"" + firstName + "\"" +
 				",\"" + lastName + "\"" +
 				"," + (dob == null ? "NULL" : "\"" + dob.toString() + "\"") +
@@ -175,13 +190,14 @@ public class FabFlixDBManager
 		
 		try {
 			Statement insert = mConnection.createStatement();
-			int rowCount = insert.executeUpdate(insertStatement);
+			insert.executeUpdate(insertStatement,Statement.RETURN_GENERATED_KEYS);
+			ResultSet result = insert.getGeneratedKeys();
 			buffer.append("\n");
 			
-			if (rowCount == 0)
-				buffer.append(FabFlixConsole.getErrorMessage("Unable to add star into database.\n"));
+			if (result != null && result.next())
+				buffer.append(FabFlixConsole.getInfoMessage("Successfully added star into database! Newly added star's ID is " + result.getInt(1) + "\n"));
 			else
-				buffer.append(FabFlixConsole.getInfoMessage("Successfully added star into database!\n"));
+				buffer.append(FabFlixConsole.getErrorMessage("Unable to add star into database.\n"));
 			return buffer.toString();
 			
 		} catch (SQLException e) {
@@ -189,41 +205,110 @@ public class FabFlixDBManager
 			switch (e.getErrorCode()) {
 			case 1146:	// Table not found
 				return FabFlixConsole.getErrorMessage(e.getMessage() + ". Unable to run insertion.");
-			case 1062: // Duplicate primary key entry
-				return FabFlixConsole.getErrorMessage("Duplicate ID '" + id + "' already found for table \"star\". Unable to run insertion.");
 			default:
 				return FabFlixConsole.getErrorMessage("Error code " + e.getErrorCode() + ": " + e.getMessage());
 			}
 		} catch (NullPointerException e) {
-			return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			if (mConnection == null)
+				return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			return FabFlixConsole.getErrorMessage("Error executing insertion of star.");
+		}
+	}
+
+	/**
+	 * Inserts a customer into the movie database. If an error occurs while inserting a customer,
+	 * the operation is canceled and a proper error message is returned by the method.
+	 * If the credit card ID provided does not exist, an error message is returned. No
+	 * ID is needed for the insertion since it is auto-incremented.
+	 * 
+	 * @param firstName	first name of customer
+	 * @param lastName	last name of customer
+	 * @param creditCardID	ID of the customers's credit card (must exist in database)
+	 * @param address	address of customer
+	 * @param email	e-mail address of customer login
+	 * @param password	password for customer login
+	 * @return	message that indicates whether operation succeeded or failed
+	 */
+	public String insertCustomer(String firstName, String lastName, String creditCardID, 
+		String address, String email, String password) {
+		
+		if (lastName == null)
+			return FabFlixConsole.getErrorMessage("Invalid last name inputted. Cannot insert customer.");
+		if (creditCardID == null)
+			return FabFlixConsole.getErrorMessage("Invalid credit card ID inputted. Cannot insert customer.");
+		if (address == null)
+			return FabFlixConsole.getErrorMessage("Invalid address inputted. Cannot insert customer.");
+		if (email == null)
+			return FabFlixConsole.getErrorMessage("Invalid e-mail address inputted. Cannot insert customer.");
+		if (password == null)
+			return FabFlixConsole.getErrorMessage("Invalid password inputted. Cannot insert customer.");
+		
+		if (!creditCardExistsInDB(creditCardID))
+			return FabFlixConsole.getErrorMessage("Credit card does not exist inside database. Cannot insert customer.");
+		
+		String insertStatement = "insert into customers values(DEFAULT" + 
+				",\"" + firstName + "\"" +
+				",\"" + lastName + "\"" +
+				",\"" + creditCardID + "\"" +
+				",\"" + address + "\"" +
+				",\"" + email + "\"" +
+				",\"" + password + "\"" + ")";
+		
+		try {
+			Statement insert = mConnection.createStatement();
+			insert.executeUpdate(insertStatement,Statement.RETURN_GENERATED_KEYS);
+			ResultSet result = insert.getGeneratedKeys();
+			
+			if (result != null && result.next())
+				return FabFlixConsole.getInfoMessage("Successfully added customer into database! Newly added customer's ID is " + result.getInt(1) + ".\n"); 
+			return FabFlixConsole.getInfoMessage("Unable to add customer into database.\n");
+			
+		} catch (SQLException e) {
+			// Return the proper error message 
+			switch (e.getErrorCode()) {
+			case 1146:	// Table not found
+				return FabFlixConsole.getErrorMessage(e.getMessage() + ". Unable to run insertion.");
+			default:
+				return FabFlixConsole.getErrorMessage("Error code " + e.getErrorCode() + ": " + e.getMessage());
+			}
+		} catch (NullPointerException e) {
+			if (mConnection == null)
+				return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			return FabFlixConsole.getErrorMessage("Error executing insertion of star.");
 		}
 	}
 	
 	/**
-	 * Returns a String[] in the format of [<i>first name</i>, <i>last name</i>] from a given String of a full name.
-	 * Accomplishes error checking if only one part of a name is given, which sets it to be the last name of the result.
+	 * Checks if a specified credit card (by ID) exists in the database.
 	 * 
-	 * @param name	full name of a star
-	 * @return	String array of size 2 with the first index being the first name and the second index being the last name
+	 * @param creditCardID	id of the credit card
+	 * @return	true if the credit card exists, false otherwise
 	 */
-	private String[] getFullName(String name) {
-		String[] result = new String[2];	// result holds: [first_name, last_name]
-		result[0] = ""; result[1] = "";
+	private boolean creditCardExistsInDB(String creditCardID) {
+		String query = "select * from creditcards where id = \"" + creditCardID + "\"";
 		
-		String[] nameSplit = name.split(" ");
-		switch (nameSplit.length) {
-		case 1:		// Star has a single name, add it as last name and leave first name empty
-			result[0] = "";
-			result[1] = name;
-			break;
-		default:
-			for (int i = 0; i < nameSplit.length-1; i++)
-				result[0] += nameSplit[i] + " ";
-			result[0] = result[0].substring(0, result[0].length()-1);	// to take out the extra space in the end
-			result[1] = nameSplit[nameSplit.length-1];
-			break;
+		try {
+			Statement statement = mConnection.createStatement();
+			ResultSet result = statement.executeQuery(query);
+			return result != null && result.next();
+			
+		} catch (SQLException e) {
+			// Return the proper error message 
+			switch (e.getErrorCode()) {
+			case 1146:	// Table not found
+				System.out.println(FabFlixConsole.getErrorMessage("Credit card check: " + e.getMessage() + ". Unable to run insertion."));
+				break;
+			default:
+				System.out.println(FabFlixConsole.getErrorMessage("Credit card check: " + "Error code " + e.getErrorCode() + ": " + e.getMessage()));
+				break;
+			}
+			return false;
+		} catch (NullPointerException e) {
+			if (mConnection == null)
+				System.out.println(FabFlixConsole.getErrorMessage("Credit card check: " + "No connection established with database server."));
+			else
+				System.out.println(FabFlixConsole.getErrorMessage("Credit card check: " + "Error executing insertion of star."));
+			return false;
 		}
-		
-		return result;
 	}
 }

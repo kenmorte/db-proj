@@ -8,7 +8,7 @@ CREATE TABLE `movies` (
    PRIMARY KEY (`id`)
  ) ENGINE=InnoDB AUTO_INCREMENT=907010 DEFAULT CHARSET=utf8;
 CREATE TABLE `stars` (
-   `id` int(11) NOT NULL,
+   `id` int(11) NOT NULL AUTO_INCREMENT,
    `first_name` varchar(50) NOT NULL,
    `last_name` varchar(50) NOT NULL,
    `dob` date DEFAULT NULL,
