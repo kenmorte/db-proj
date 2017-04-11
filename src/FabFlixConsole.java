@@ -80,7 +80,7 @@ public class FabFlixConsole
 		if (mReader != null)
 			mReader.close();
 		
-		System.out.print("Closing program...");
+		System.out.print("Closing program...\n");
 	}
 	
 	/**
