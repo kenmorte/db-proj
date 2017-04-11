@@ -7,7 +7,7 @@ import java.sql.*;
 
 public class FabFlixConsole
 {
-	private FabFlixDBManager mManager;
+	private FabFlixDBManager mDBManager;
 	private Scanner mReader;
 	
 	private static final String mErrorHeader = "**ERROR**: ";
@@ -20,11 +20,14 @@ public class FabFlixConsole
 					"[1]\t Print out movies featuring a given star by ID\n" +
 					"[2]\t Print out movies featuring a given star by first and/or last name\n" +
 					"[3]\t Insert a new star into the database\n" +
-					"[4]\t Insert a new customer into the database";
+					"[4]\t Insert a new customer into the database\n" +
+					"[5]\t Delete a customer from the database by ID\n" +
+					"[6]\t Print out metadata of the database\n" + 
+					"[7]\t Enter a custom SQL command and print out its results";
 	
 	public FabFlixConsole() {
 		try {
-			mManager = new FabFlixDBManager();
+			mDBManager = new FabFlixDBManager();
 	        mReader = new Scanner(System.in);
 	        
 		} catch (Exception e) {
@@ -36,7 +39,6 @@ public class FabFlixConsole
 	 * Runs the console program using JDBC.
 	 */
 	public void run() {
-		
 		while (attemptLogin()) {
 			String input = "", output = "";
 			
@@ -70,6 +72,7 @@ public class FabFlixConsole
 				}
 			}
 			
+			mDBManager.closeConnection();
 			System.out.println(getInfoMessage("Logging out of database '" + FabFlixDBManager.DATABASE_NAME + "'...\n"));
 		}
 		
@@ -105,13 +108,13 @@ public class FabFlixConsole
 		case 1:	// Get movies featuring star by star ID
 			id = promptInt("\tEnter the movie star's ID: ", "Invalid ID inputted. Unable to execute query.", true);
 			if (id != null)
-				output = mManager.getMoviesForStar(id);
+				output = mDBManager.getMoviesForStar(id);
 			break;
 		
 		case 2: // Get movies featuring star by first and/or last name (of star)
 			firstName = promptString("\tEnter the movie star's first name (optional): ", "", true, true);
 			lastName = promptString("\tEnter the movie star's last name" + " (optional): ", "", true, true);
-			output = mManager.getMoviesForStar(firstName, lastName);
+			output = mDBManager.getMoviesForStar(firstName, lastName);
 			break;
 			
 		case 3: // Insert a new star into the database
@@ -127,7 +130,7 @@ public class FabFlixConsole
 			}
 			
 			String photoURL = promptString("\tEnter a URL of the movie star's photo (optional): ", "", true, true);
-			output = mManager.insertStar(firstName, lastName, dob, photoURL);
+			output = mDBManager.insertStar(firstName, lastName, dob, photoURL);
 			break;
 		
 		case 4: 
@@ -140,19 +143,37 @@ public class FabFlixConsole
 			if (creditCardID == null)
 				break;
 			
-			String address = promptString("\tEnter the customer's address: ", "Invalid or empty address inputted. Unable to execute insertion.", false, true);
+			String address = promptString("\tEnter the customer's address: ", "", true, true);
 			if (address == null)
-				break;
+				address = "";
 			
-			String email = promptString("\tEnter the customer's e-mail address: ", "Invalid or empty e-mail address inputted. Unable to execute insertion.", false, true);
+			String email = promptString("\tEnter the customer's e-mail address: ", "", true, true);
 			if (email == null)
-				break;
+				email = "";
 			
-			String password = promptString("\tEnter the customer's password: ", "Invalid or empty password inputted. Unable to execute insertion.", false, true);
+			String password = promptString("\tEnter the customer's password: ", "", true, true);
 			if (password == null)
+				password = "";
+			
+			output = mDBManager.insertCustomer(firstName, lastName, creditCardID, address, email, password);
+			break;
+			
+		case 5:
+			id = promptInt("\tEnter the customer's ID: ", "Invalid ID inputted. Unable to execute removal.", true);
+			if (id == null)
 				break;
 			
-			output = mManager.insertCustomer(firstName, lastName, creditCardID, address, email, password);
+			output = mDBManager.deleteCustomer(id);
+			break;
+			
+		case 6:
+			output = mDBManager.getMetaData();
+			break;
+			
+		case 7:
+			String command = promptString("\tEnter a valid SELECT/UPDATE/INSERT/DELETE SQL command: ", "Invalid or empty SQL command found. Unable to execute command.", false, true);
+			if (command != null && !command.isEmpty())
+				output = mDBManager.executeSQL(command);
 			break;
 		default:	// Unknown command
 			output = getErrorMessage("Unknown command inputted. Please try again");
@@ -173,7 +194,7 @@ public class FabFlixConsole
 		String username = "", password = "";
 		SQLException connectionError;
 		
-		System.out.print("Enter a username, or enter 'quit' to exit program: ");
+		System.out.print("Enter your database username, or enter 'quit' to exit program: ");
 		while (!(username = mReader.nextLine()).equals("quit")) {
 			
 			// Re-inquire for user name if user name was left empty
@@ -182,7 +203,7 @@ public class FabFlixConsole
 				continue;
 			}
 			
-			System.out.print("Enter a password: ");
+			System.out.print("Enter your database password: ");
 			password = mReader.nextLine();
 			if (password.isEmpty()) {
 				// Re-inquire for user name again if password was left empty
@@ -191,7 +212,7 @@ public class FabFlixConsole
 			}
 			
 			// Attempt connection with database, print our error if connection was unsuccessful
-			if ((connectionError = mManager.attemptConnection(username, password)) != null) {
+			if ((connectionError = mDBManager.attemptConnection(username, password)) != null) {
 				switch (connectionError.getErrorCode()) {
 				case 1045:
 					System.out.println(getErrorMessage("Invalid login credentials provided. Please try again."));
@@ -204,7 +225,7 @@ public class FabFlixConsole
 				}
 				
 				// Prompt for user login credentials again
-				System.out.print("Enter a username, or enter 'quit' to exit program: ");
+				System.out.print("Enter your username, or enter 'quit' to exit program: ");
 				continue;
 			}
 			return true;
@@ -236,7 +257,7 @@ public class FabFlixConsole
 	/**
 	 * Prompts the user for an integer, and prints out proper prompt headers before input
 	 * and error messages after input for non-integer inputs. Can repeatedly prompt user
-	 * continuously until appropriate integer is inputted or prompt user only once using
+	 * continuously until appropriate integer is input or prompt user only once using
 	 * the <i>promptOnce</i> argument.
 	 * 
 	 * @param prompt	Prompt header that is displayed prior to user input

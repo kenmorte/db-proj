@@ -1,5 +1,8 @@
 import java.sql.*;
 
+// ssh -i "CS122binstance.pem" ubuntu@ec2-52-38-107-73.us-west-2.compute.amazonaws.com (for Christian's computer)
+// IP address: 52.38.107.73
+
 public class FabFlixDBManager
 {
 	private Connection mConnection;
@@ -32,6 +35,30 @@ public class FabFlixDBManager
 			return e;
 		}
 		return null;
+	}
+	
+	public void closeConnection() {
+		try {
+			if (mConnection != null && !mConnection.isClosed())
+				mConnection.close();
+		} catch (SQLException e) {
+			System.out.println(FabFlixConsole.getErrorMessage("Error closing connection: " + e.getMessage()));
+		}
+
+	}
+	
+	/**
+	 * Returns the status of the connection to the database from the JDBC program.
+	 * 
+	 * @return	true if the connection is live, false otherwise
+	 */
+	public boolean isConnectionLive() {
+		try {
+			return mConnection != null && !mConnection.isClosed();
+			
+		} catch (SQLException e) {
+			return false;
+		}
 	}
 	
 	/**
@@ -75,6 +102,8 @@ public class FabFlixDBManager
 			if (!resultsFound)
 				buffer.append("No results found!\n");
 			
+			select.close();
+			result.close();
 			return buffer.toString();
 		}
 		catch (SQLException e) {
@@ -147,6 +176,8 @@ public class FabFlixDBManager
 			if (!resultsFound)
 				buffer.append("No results found!\n");
 			
+			select.close();
+			result.close();
 			return buffer.toString();
 			
 		} catch (SQLException e) {
@@ -194,10 +225,15 @@ public class FabFlixDBManager
 			ResultSet result = insert.getGeneratedKeys();
 			buffer.append("\n");
 			
-			if (result != null && result.next())
-				buffer.append(FabFlixConsole.getInfoMessage("Successfully added star into database! Newly added star's ID is " + result.getInt(1) + "\n"));
+			if (result != null && result.next()) {
+				int newStarID = result.getInt(1);
+				result.close();
+				buffer.append(FabFlixConsole.getInfoMessage("Successfully added star into database! Newly added star's ID is " + newStarID + "\n"));
+			}
 			else
 				buffer.append(FabFlixConsole.getErrorMessage("Unable to add star into database.\n"));
+			
+			insert.close();
 			return buffer.toString();
 			
 		} catch (SQLException e) {
@@ -259,8 +295,14 @@ public class FabFlixDBManager
 			insert.executeUpdate(insertStatement,Statement.RETURN_GENERATED_KEYS);
 			ResultSet result = insert.getGeneratedKeys();
 			
-			if (result != null && result.next())
-				return FabFlixConsole.getInfoMessage("Successfully added customer into database! Newly added customer's ID is " + result.getInt(1) + ".\n"); 
+			if (result != null && result.next()) {
+				int newCustomerID = result.getInt(1);
+				insert.close();
+				result.close();
+				return FabFlixConsole.getInfoMessage("Successfully added customer into database! Newly added customer's ID is " + newCustomerID + ".\n");
+			}
+			
+			insert.close();
 			return FabFlixConsole.getInfoMessage("Unable to add customer into database.\n");
 			
 		} catch (SQLException e) {
@@ -278,11 +320,164 @@ public class FabFlixDBManager
 		}
 	}
 	
+	/**
+	 * Deletes a customer from the database by customer ID number. Outputs
+	 * proper error messages if an error occurred doing the deletion. Otherwise,
+	 * a proper output message is displayed if the function was a success or not.
+	 * 
+	 * @param id	customer ID
+	 * @return	output message (success, failure, error) of deleting a customer
+	 */
 	public String deleteCustomer(Integer id) {
 		if (id == null)
 			return FabFlixConsole.getErrorMessage("Invalid ID inputted. Cannot execute deletion.");
 		
-		return "foo";
+		String deleteStatement = "delete from customers where id = " + id;
+		
+		try {
+			// Create and run the query onto the database
+			Statement delete = mConnection.createStatement();
+			int rowsDeleted = delete.executeUpdate(deleteStatement, Statement.RETURN_GENERATED_KEYS);
+			delete.close();
+	
+			if (rowsDeleted > 0)
+				return FabFlixConsole.getInfoMessage("Successfully deleted customer with ID =  " + id + " from database.\n"); 
+			return FabFlixConsole.getInfoMessage("No customer with ID = " + id + " found. Unable to remove customer from database.\n");
+			
+		}
+		catch (SQLException e) {
+			// Return the proper error message 
+			switch (e.getErrorCode()) {
+			case 1146:
+				return FabFlixConsole.getErrorMessage(e.getMessage() + ". Unable to run query.");
+			default:
+				return FabFlixConsole.getErrorMessage("Error code " + e.getErrorCode() + ": " + e.getMessage());
+			}
+		} catch (NullPointerException e) {
+			if (mConnection == null)
+				return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			return FabFlixConsole.getErrorMessage("Error executing insertion of star.");
+		}
+	}
+	
+	/**
+	 * Output a string of the database meta-data information. If an error occurs
+	 * while obtaining the meta-data, output an error message.
+	 * 
+	 * @return	output of operation: either the meta-data of the database or an error message
+	 */
+	public String getMetaData() {
+		if (mConnection == null)
+			return FabFlixConsole.getInfoMessage("No connection established with database. Unable to execute metadata query.");
+		
+		try {
+			// thanks to: http://tutorials.jenkov.com/jdbc/databasemetadata.html
+			DatabaseMetaData metadata = mConnection.getMetaData();
+			ResultSet tables = metadata.getTables(null, null, null, null);
+			ResultSet columns;
+			
+			StringBuffer buffer = new StringBuffer();
+			buffer.append("\n");
+			buffer.append("TABLE_NAME: COLUMN_NAME1 (COLUMN_TYPE1), COLUMN_NAME2 (COLUMN_TYPE2), ...\n");
+			buffer.append("----------------------------------------------------\n");
+			
+			while (tables.next()) {
+				// Table name located at column 3 of meta-data table info
+				String tableName = tables.getString(3);
+				buffer.append(tableName + ":");
+				
+				columns = metadata.getColumns(null, null, tableName, null);
+				while (columns.next()) {
+					// Column name and type located at columns 4 and 5 of meta-data column info
+					String columnName = columns.getString(4);
+					String columnType = getColumnTypeName(columns.getInt(5));
+					
+					buffer.append(" " + columnName + " (" + columnType + "),");
+				}
+				columns.close();
+				buffer.append("\n");
+			}
+			
+			tables.close();
+			buffer.deleteCharAt(buffer.length()-1);
+			return buffer.toString();
+			
+		} catch (SQLException e) {
+			return FabFlixConsole.getErrorMessage("Error code " + e.getErrorCode() + ": " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * Execute a custom SQL command and output its results. If the command was a SELECT
+	 * query, then output the resulting table. If the command was an UPDATE/DELETE/INSERT,
+	 * then it outputs the amount of rows affected by the update query.
+	 * 
+	 * @param command	SQL command to be processed
+	 * @return	output message; if the command was a SELECT query, the table is returned; otherwise the number of rows affected is output
+	 */
+	public String executeSQL(String command) {
+		if (command == null || command.isEmpty())
+			return FabFlixConsole.getErrorMessage("Invalid or empty SQL command found. Unable to execute command.");
+		
+		Statement statement = null;
+		ResultSet result = null;
+		
+		try {
+			statement = mConnection.createStatement();
+			boolean hasResultSet = statement.execute(command, Statement.RETURN_GENERATED_KEYS);
+			result = statement.getResultSet();
+			
+			if (hasResultSet && result != null) {
+				ResultSetMetaData resultMetaData = result.getMetaData();
+				StringBuffer buffer = new StringBuffer("\nTable: " + resultMetaData.getTableName(1) + 
+					"\n--------------------------");
+				boolean resultsFound = false;
+				
+				buffer.append("\n");
+				while (result.next()) {
+					resultsFound = true;
+					
+					for (int i = 1; i < resultMetaData.getColumnCount() + 1; i++) {
+						String columnValue = result.getString(i);
+						buffer.append(resultMetaData.getColumnName(i) + " = " + 
+								(columnValue == null ? "null" : columnValue) + "\n");
+					}
+					buffer.append("\n");
+				}
+				
+				if (!resultsFound)
+					buffer.append("No results found!\n");
+				
+				statement.close();
+				result.close();
+				return buffer.toString();
+			} else {
+				int updateCount = statement.getUpdateCount();
+				statement.close();
+				return FabFlixConsole.getInfoMessage("Successfully updated database. " + 
+						updateCount + " record(s) have been updated.");
+			}
+			
+		} catch (SQLException e) {
+			switch (e.getErrorCode()) {
+			case 1064:
+				return FabFlixConsole.getErrorMessage("Invalid SQL syntax. Please check your syntax and try again.");
+			case 1146:
+				return FabFlixConsole.getErrorMessage("Invalid table specified. " + e.getMessage());
+			case 1054:
+				return FabFlixConsole.getErrorMessage("Invalid column specified. " + e.getMessage());
+			case 1136:
+				return FabFlixConsole.getErrorMessage("Invalid amount of values specified for insertion. " + e.getMessage());
+			case 1366:
+				return FabFlixConsole.getErrorMessage("Invalid value type for column specification. " + e.getMessage());
+			}
+			return FabFlixConsole.getErrorMessage("Error code " + e.getErrorCode() + ": " + e.getMessage());
+			
+		} catch (NullPointerException e) {
+			if (mConnection == null)
+				return FabFlixConsole.getErrorMessage("No connection established with database server.");
+			return FabFlixConsole.getErrorMessage("Error executing executing command + '" + command + "'.");
+		}
 	}
 	
 	/**
@@ -297,7 +492,11 @@ public class FabFlixDBManager
 		try {
 			Statement statement = mConnection.createStatement();
 			ResultSet result = statement.executeQuery(query);
-			return result != null && result.next();
+			boolean resultBoolean = result != null && result.next();
+			
+			statement.close();
+			result.close();
+			return resultBoolean;
 			
 		} catch (SQLException e) {
 			// Return the proper error message 
@@ -316,6 +515,31 @@ public class FabFlixDBManager
 			else
 				System.out.println(FabFlixConsole.getErrorMessage("Credit card check: " + "Error executing insertion of star."));
 			return false;
+		}
+	}
+
+	/**
+	 * Get the column type name given a corresponding ID for the column type.
+	 * 
+	 * @param columnTypeID	column type ID
+	 * @return	title for the column type
+	 */
+	private String getColumnTypeName(int columnTypeID) {
+		switch (columnTypeID) {
+		case Types.INTEGER:
+			return "INTEGER";
+		case Types.DATE:
+			return "DATE";
+		case Types.NULL:
+			return "NULL";
+		case Types.VARCHAR:
+			return "VARCHAR";
+		case Types.CHAR:
+			return "CHAR";
+		case Types.NCHAR:
+			return "NCHAR";
+		default:
+			return "COLUMN TYPE ID = " + columnTypeID;
 		}
 	}
 }
