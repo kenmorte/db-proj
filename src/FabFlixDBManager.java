@@ -1,7 +1,7 @@
 import java.sql.*;
 
 // ssh -i "CS122binstance.pem" ubuntu@ec2-52-38-107-73.us-west-2.compute.amazonaws.com (for Christian's computer)
-// IP address: 52.38.107.73
+// Server IP address: 52.38.107.73
 
 public class FabFlixDBManager
 {
